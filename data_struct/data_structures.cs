@@ -16,6 +16,9 @@ public class ClickerRPG : MonoBehaviour
     [SerializeField] private GameObject inventoryContainer; // Container for the inventory UI
     [SerializeField] private TextMeshProUGUI equippedItemText; // Text to display equipped item
     [SerializeField] private TextMeshProUGUI taskCountText; // Text to display the number of tasks
+    [SerializeField] private TextMeshProUGUI shopText; // Text to display shop items
+    [SerializeField] private TextMeshProUGUI monsterHealthText; // Text to display monster health
+    [SerializeField] private TextMeshProUGUI messageText; // Text to display messages (e.g., monster defeated)
 
     public PlayerProfile player;
     public List<Monster> monsters;
@@ -23,23 +26,23 @@ public class ClickerRPG : MonoBehaviour
     public Shop shop;
     public int currentLevel = 1;
 
+    private Monster currentMonster;
+
     private List<Monster> monsterPool = new List<Monster>
     {
-        new Monster("Goblin", 100, 10, "Sprites/Goblin"), // Path to the monster sprite
-        new Monster("Orc", 150, 20, "Sprites/Orc"),
-        new Monster("Troll", 200, 30, "Sprites/Troll"),
-        new Monster("Skeleton", 120, 15, "Sprites/Skeleton")
+        new Monster("Assets/pixel_goblin.png", 100, 10), // Path to the monster sprite
+        // You can add more monsters here if needed
     };
 
     void Start()
     {
         player = new PlayerProfile();
-        monsters = new List<Monster> { GetRandomMonster() };
+        currentMonster = GetRandomMonster();
+        monsters = new List<Monster> { currentMonster };
         tasks = new List<Task>();
         shop = new Shop();
 
         buyItemButton.onClick.AddListener(BuyItem);
-        completeTaskButton.onClick.AddListener(CompleteTask);
         addTaskButton.onClick.AddListener(AddTask);
         gachaPullButton.onClick.AddListener(GachaPull);
         monsterImage.GetComponent<Button>().onClick.AddListener(AttackMonster);
@@ -49,16 +52,17 @@ public class ClickerRPG : MonoBehaviour
         DisplayInventoryItems(); // Display items in the inventory at the start
     }
 
-    private void AttackMonster()
+    public void AttackMonster()
     {
-        if (monsters.Count > 0)
+        if (currentMonster != null)
         {
-            monsters[0].TakeDamage(player.GetTotalDamage());
-            if (monsters[0].health <= 0)
+            currentMonster.TakeDamage(player.GetTotalDamage());
+            if (currentMonster.health <= 0)
             {
-                player.xp += monsters[0].GetScaledXP(currentLevel);
-                monsters.RemoveAt(0);
-                monsters.Add(GetRandomMonster());
+                player.xp += currentMonster.GetScaledXP(currentLevel);
+                messageText.text = $"{currentMonster.spritePath} defeated!";
+                currentMonster = GetRandomMonster(); // Get a new monster
+                monsters[0] = currentMonster; // Update the current monster in the list
             }
         }
         UpdateUI();
@@ -66,26 +70,20 @@ public class ClickerRPG : MonoBehaviour
 
     private void BuyItem()
     {
-        if (shop.itemsForSale.Count > 0 && player.gold >= shop.itemsForSale[0].price)
-        {
-            player.BuyItem(shop.itemsForSale[0]);
-            shop.itemsForSale.RemoveAt(0);
-        }
-        UpdateUI();
+        // This method is no longer needed since we will handle item buying through the shop display
     }
 
-    private void CompleteTask()
+    private void CompleteTask(Task task)
     {
-        if (tasks.Count > 0)
+        if (task != null)
         {
-            Task completedTask = tasks[0];
-            tasks.RemoveAt(0);
+            tasks.Remove(task);
 
             // Remove the task UI when completed
-            DestroyTaskUI(completedTask);
+            DestroyTaskUI(task);
 
             // Add the gold reward and XP for the completed task
-            completedTask.CompleteTask(player);
+            task.CompleteTask(player);
 
             // Update the stats UI to reflect the new gold and XP
             UpdateUI();
@@ -110,10 +108,12 @@ public class ClickerRPG : MonoBehaviour
     {
         GameObject newTaskUI = Instantiate(taskPrefab, taskListContainer.transform);
         newTaskUI.GetComponentInChildren<TextMeshProUGUI>().text = $"{task.name} (Gold: {task.goldReward * task.difficulty}, XP: {task.xpReward})";
-        newTaskUI.GetComponent<Button>().onClick.AddListener(() => CompleteTask());
+
+        // Add a listener to complete the task when clicked
+        newTaskUI.GetComponent<Button>().onClick.AddListener(() => CompleteTask(task));
     }
 
-    private void DestroyTaskUI(Task task)
+    public void DestroyTaskUI(Task task)
     {
         // Find and destroy the task's UI element when the task is completed
         foreach (Transform child in taskListContainer.transform)
@@ -132,9 +132,10 @@ public class ClickerRPG : MonoBehaviour
         statsText.text = $"Gold: {player.gold} | XP: {player.xp} | Level: {currentLevel} | Tasks: {tasks.Count}";
 
         // Update the monster image based on the current monster
-        if (monsters.Count > 0)
+        if (currentMonster != null)
         {
-            monsterImage.GetComponent<Image>().sprite = Resources.Load<Sprite>(monsters[0].spritePath);
+            monsterImage.GetComponent<Image>().sprite = Resources.Load<Sprite>(currentMonster.spritePath);
+            monsterHealthText.text = $"Monster Health: {currentMonster.health}"; // Display monster health
         }
 
         // Update equipped item text
@@ -142,6 +143,9 @@ public class ClickerRPG : MonoBehaviour
 
         // Update task count text
         taskCountText.text = $"Tasks: {tasks.Count}";
+
+        // Update inventory items
+        DisplayInventoryItems(); // Refresh inventory display
 
         // Level up check if XP exceeds threshold
         CheckLevelUp();
@@ -159,7 +163,9 @@ public class ClickerRPG : MonoBehaviour
 
     private Monster GetRandomMonster()
     {
-        return new Monster(monsterPool[Random.Range(0, monsterPool.Count)]);
+        // Create a new Monster using the existing constructor
+        Monster randomMonster = monsterPool[0]; // Only one monster type for now
+        return new Monster(randomMonster.spritePath, randomMonster.health, randomMonster.baseXP);
     }
 
     // Implement Gacha Pull Mechanic
@@ -215,17 +221,28 @@ public class ClickerRPG : MonoBehaviour
     // Display items in the shop
     private void DisplayShopItems()
     {
+        shopText.text = "Shop Items:\n"; // Clear previous items
         foreach (var item in shop.itemsForSale)
         {
             GameObject itemUI = Instantiate(itemPrefab, taskListContainer.transform);
             itemUI.GetComponentInChildren<TextMeshProUGUI>().text = $"{item.name} (Damage: {item.damageMultiplier}, Price: {item.price})";
-            itemUI.GetComponent<Button>().onClick.AddListener(() => player.BuyItem(item));
+            itemUI.GetComponent<Button>().onClick.AddListener(() => {
+                player.BuyItem(item);
+                UpdateUI(); // Update UI after buying an item
+            });
+            shopText.text += $"{item.name} - Price: {item.price}\n"; // Display available items in the shop text
         }
     }
 
     // Display items in the inventory
     private void DisplayInventoryItems()
     {
+        // Clear existing items in the inventory UI
+        foreach (Transform child in inventoryContainer.transform)
+        {
+            Destroy(child.gameObject);
+        }
+
         foreach (var item in player.inventory)
         {
             GameObject itemUI = Instantiate(itemPrefab, inventoryContainer.transform);
@@ -302,7 +319,7 @@ public class Monster
 {
     public string spritePath; // Path to the monster sprite
     public int health;
-    private int baseXP;
+    public int baseXP; // Changed to public
 
     public Monster(string spritePath, int health, int baseXP)
     {
